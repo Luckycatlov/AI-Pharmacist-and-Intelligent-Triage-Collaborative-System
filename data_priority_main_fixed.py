@@ -2,8 +2,13 @@
 修复编码问题的版本 - 移除所有emoji字符
 """
 import sys
+import os
 import chromadb
 from chromadb.config import Settings
+
+# 禁用telemetry相关输出
+os.environ['SENTENCE_TRANSFORMERS_NO_TELEMETRY'] = '1'
+os.environ['CHROMA_TELEMETRY'] = 'false'
 
 chromadb.config.allow_reset = True
 
@@ -195,7 +200,7 @@ def format_guidance_response(user_input: str, disease: str, tcm_results: list, i
 [提示] 本回答基于专业医疗指南，仅供参考。请遵医嘱。"""
 
 def rag_medical_response(user_input: str) -> str:
-    """RAG医疗响应 - 使用知识库检索"""
+    """RAG医疗响应 - 使用知识库检索，显示真实依据"""
     print("  -> 执行: RAG医疗知识库检索")
 
     try:
@@ -206,22 +211,41 @@ def rag_medical_response(user_input: str) -> str:
         rag = MedicalRAG()
         results = rag.retrieve(user_input, top_k=3)
 
+        if not results or len(results) == 0:
+            return "抱歉，未找到相关的医疗知识。"
+
+        # 构建显示检索依据的响应
+        output = []
+        output.append(f"[问题] {user_input}")
+        output.append(f"[检索结果] 找到 {len(results)} 条相关医疗知识")
+        output.append("")
+
+        # 显示检索到的具体依据
+        for i, result in enumerate(results, 1):
+            output.append(f"[依据{i}] 来源: {result.get('category', '医疗知识库')}")
+            output.append(f"内容: {result.get('text', '')}")
+            output.append(f"相关度: {1 - result.get('distance', 0.5):.2f}")
+            output.append("")
+
+        # 使用LLM整合这些依据给出建议
         context = rag.format_retrieval_context(results)
 
         llm_client = get_llm_client(config.DEFAULT_MODEL)
 
         response = llm_client.messages_create(
-            system_prompt="你是专业的医疗助手。基于检索到的医疗知识回答用户问题。",
-            user_message=f"用户问题: {user_input}\n\n{context}",
-            max_tokens=800,
-            temperature=0.5
+            system_prompt="你是专业的医疗助手。请基于提供的检索依据，简要总结医疗建议。不要添加检索依据中没有的信息。",
+            user_message=f"用户问题: {user_input}\n\n检索依据:\n{context}",
+            max_tokens=500,
+            temperature=0.3
         )
 
-        return f"""{response}
+        output.append(f"[基于检索依据的建议]")
+        output.append(response)
+        output.append("")
+        output.append(f"[数据溯源] 本次回答基于RAG检索到的{len(results)}条医疗知识")
+        output.append("[提示] 本回答仅供参考，如有不适请及时就医。")
 
----
-数据来源: RAG医疗知识库
-[提示] 本回答仅供参考，如有不适请及时就医。"""
+        return "\n".join(output)
 
     except Exception as e:
         print(f"  -> RAG检索失败: {e}")

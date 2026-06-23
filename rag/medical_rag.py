@@ -6,10 +6,60 @@ import os
 import chromadb
 from chromadb.config import Settings
 import config
+import warnings
+import logging
+import sys
+
+# 在导入任何库之前禁用telemetry
+os.environ['SENTENCE_TRANSFORMERS_NO_TELEMETRY'] = '1'
+os.environ['CHROMA_TELEMETRY'] = 'false'
+os.environ['ANONYMIZED_TELEMETRY'] = 'false'
+
+# 禁用chromadb的telemetry
+chromadb.config.allow_reset = True
+
+# 禁用所有警告
+warnings.filterwarnings('ignore')
+
+# 设置日志级别为ERROR，减少输出
+logging.getLogger('sentence_transformers').setLevel(logging.ERROR)
+logging.getLogger('chromadb').setLevel(logging.ERROR)
+
+# 禁用标准输出中的telemetry错误
+class TelemetrySuppressor:
+    """抑制telemetry错误的类"""
+    def __init__(self):
+        self.original_stderr = sys.stderr
+        self.original_stdout = sys.stdout
+
+    def suppress(self):
+        """重定向stderr和stdout来过滤telemetry错误"""
+        class FilteredOutput:
+            def __init__(self, original):
+                self.original = original
+
+            def write(self, text):
+                if 'telemetry' not in text.lower() and 'Failed to send' not in text:
+                    self.original.write(text)
+
+            def flush(self):
+                self.original.flush()
+
+        sys.stderr = FilteredOutput(self.original_stderr)
+        sys.stdout = FilteredOutput(self.original_stdout)
+
+    def restore(self):
+        """恢复原始输出"""
+        sys.stderr = self.original_stderr
+        sys.stdout = self.original_stdout
 
 class MedicalRAG:
     def __init__(self):
         """初始化RAG系统"""
+        # 抑制telemetry错误
+        self.suppressor = TelemetrySuppressor()
+        self.suppressor.suppress()
+
         self.embedder = self._load_embedder()
         self.chroma_client = chromadb.PersistentClient(path=config.CHROMA_PERSIST_DIR)
         self.collection = self._get_or_create_collection()
