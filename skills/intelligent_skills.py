@@ -270,14 +270,14 @@ class MedicalSkills:
         """
         print(f"[溯源RAG查询] 问题: {question}")
 
-        # 执行RAG检索
-        results = self.rag.retrieve(question, top_k=top_k)
+        # 执行RAG检索 - retrieve方法返回List[Dict]
+        retrieved_docs = self.rag.retrieve(question, top_k=top_k)
 
         # 构建溯源报告
         traceable_report = {
             "question": question,
             "retrieval_summary": {
-                "total_retrieved": len(results.get('documents', [[]])[0]) if results else 0,
+                "total_retrieved": len(retrieved_docs) if retrieved_docs else 0,
                 "query_timestamp": None,
                 "top_k": top_k,
                 "database_used": "RAG医疗知识库"
@@ -287,25 +287,22 @@ class MedicalSkills:
             "confidence_scores": []
         }
 
-        if results and results.get('documents'):
-            documents = results['documents'][0]
-            metadatas = results.get('metadatas', [[]])[0]
-            distances = results.get('distances', [[]])[0]
-
-            for i, (doc, metadata, distance) in enumerate(zip(documents, metadatas, distances), 1):
+        if retrieved_docs:
+            for i, doc in enumerate(retrieved_docs, 1):
                 # 计算置信度（距离越小，置信度越高）
+                distance = doc.get('distance', 1.0)
                 confidence = max(0, 1 - distance)
 
                 traceable_report["retrieved_records"].append({
                     "record_id": i,
-                    "content": doc[:100] + "..." if len(doc) > 100 else doc,
-                    "source": metadata.get('source', '未知来源'),
-                    "metadata": metadata,
+                    "content": doc.get('text', '')[:100] + "..." if len(doc.get('text', '')) > 100 else doc.get('text', ''),
+                    "source": doc.get('category', '医疗知识库'),
+                    "metadata": doc,
                     "confidence": round(confidence, 2),
                     "distance": round(distance, 3)
                 })
 
-                traceable_report["data_sources"].append(metadata.get('source', '未知'))
+                traceable_report["data_sources"].append(doc.get('category', '医疗知识库'))
                 traceable_report["confidence_scores"].append(round(confidence, 2))
 
         return traceable_report
