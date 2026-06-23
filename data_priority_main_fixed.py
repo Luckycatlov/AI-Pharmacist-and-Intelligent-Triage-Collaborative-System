@@ -16,82 +16,50 @@ def print_header():
 def process_with_data_priority(user_input: str) -> str:
     """
     数据优先策略 - 强制使用加载的医疗数据
-    现在支持专业Skills和RAG溯源
+    RAG优先策略，简单有效
     """
     print(f"\n[处理问题] {user_input}")
 
-    # 分析问题类型和需要的专业技能
-    question_type, required_skill = analyze_question_type_with_skill(user_input)
+    # 简单分析问题类型
+    question_type = analyze_question_type(user_input)
     print(f"  -> 问题类型: {question_type}")
-    print(f"  -> 需要技能: {required_skill}")
 
     if question_type == "闲聊":
         return general_chat_response(user_input)
     elif question_type == "药品查询":
-        return medicine_query_with_skill_response(user_input, required_skill)
+        return medicine_query_response(user_input)
     elif question_type == "疾病咨询":
-        return disease_consultation_with_skill_response(user_input, required_skill)
+        return disease_consultation_response(user_input)
     else:
-        return rag_medical_traceable_response(user_input)
-
-def analyze_question_type_with_skill(text: str) -> tuple:
-    """
-    分析问题类型和所需专业技能 - 基于医疗数据特性
-
-    返回: (问题类型, 所需技能)
-
-    技能分类:
-    - medication_safety: 药品安全检查
-    - drug_interaction: 药物相互作用分析
-    - tcm_syndrome: 中医证候识别
-    - disease_staging: 疾病分期诊断
-    - patent_medicine: 中成药推荐
-    - integrated_treatment: 中西医结合诊疗
-    """
-    # 闲聊关键词
-    chat_keywords = ["你好", "名字", "天气", "谢谢", "再见"]
-    if any(keyword in text for keyword in chat_keywords):
-        return "闲聊", "general_chat"
-
-    # 药品安全相关 - 基于599条药品说明书
-    safety_keywords = ["副作用", "禁忌", "安全", "不良反应", "注意事项"]
-    if any(keyword in text for keyword in safety_keywords):
-        return "药品查询", "medication_safety"
-
-    # 药物相互作用
-    interaction_keywords = ["一起吃", "同时用", "相互作用", "配伍"]
-    if any(keyword in text for keyword in interaction_keywords):
-        return "药品查询", "drug_interaction"
-
-    # 中医证候相关 - 基于92条中医专家共识
-    syndrome_keywords = ["证候", "辨证", "中医", "症状"]
-    if any(keyword in text for keyword in syndrome_keywords):
-        return "疾病咨询", "tcm_syndrome"
-
-    # 疾病分期相关
-    staging_keywords = ["分期", "阶段", "期型", "进展"]
-    if any(keyword in text for keyword in staging_keywords):
-        return "疾病咨询", "disease_staging"
-
-    # 中成药相关 - 基于45条中成药数据
-    patent_keywords = ["中成药", "颗粒", "合剂", "糖浆"]
-    if any(keyword in text for keyword in patent_keywords):
-        return "药品查询", "patent_medicine"
-
-    # 中西医结合 - 基于132条中西医指南
-    integrated_keywords = ["中西医", "结合治疗", "综合治疗"]
-    if any(keyword in text for keyword in integrated_keywords):
-        return "疾病咨询", "integrated_treatment"
-
-    # 默认使用RAG检索
-    return "医疗咨询", "rag_retrieval"
+        return rag_medical_response(user_input)
 
 def analyze_question_type(text: str) -> str:
     """
-    分析问题类型 - 保持兼容性
+    分析问题类型 - 简单关键词匹配，RAG优先
     """
-    question_type, _ = analyze_question_type_with_skill(text)
-    return question_type
+    # 闲聊关键词 - 扩展匹配范围
+    chat_keywords = ["你好", "名字", "叫什么", "是谁", "天气", "谢谢", "再见", "是什么"]
+    if any(keyword in text for keyword in chat_keywords):
+        return "闲聊"
+
+    # 药品关键词
+    medicine_keywords = ["药", "服用", "用法", "用量", "副作用", "禁忌"]
+    medicine_names = ["布洛芬", "阿司匹林", "对乙酰氨基酚", "小儿清热止咳合剂"]
+
+    if any(keyword in text for keyword in medicine_keywords):
+        if any(med in text for med in medicine_names):
+            return "药品查询"
+
+    # 疾病关键词
+    disease_keywords = ["病", "症状", "治疗", "分期", "诊断"]
+    diseases = ["糖尿病", "高血压", "感冒", "头痛", "发热"]
+
+    if any(keyword in text for keyword in disease_keywords):
+        if any(disease in text for disease in diseases):
+            return "疾病咨询"
+
+    # 默认为RAG医疗咨询
+    return "医疗咨询"
 
 def general_chat_response(user_input: str) -> str:
     """通用聊天响应"""
@@ -110,132 +78,6 @@ def general_chat_response(user_input: str) -> str:
     )
 
     return f"{response}\n\n如果你有医疗相关问题，我很乐意为你提供专业建议！"
-
-def medicine_query_with_skill_response(user_input: str, skill_type: str) -> str:
-    """药品查询响应 - 使用专业医疗Skills"""
-    print(f"  -> 执行: 专业Skills [{skill_type}]")
-
-    from skills.intelligent_skills import get_medical_skills
-
-    skills = get_medical_skills()
-
-    # 提取药品名称
-    medicine_name = extract_medicine_name(user_input)
-
-    if not medicine_name:
-        return rag_medical_traceable_response(user_input)
-
-    # 根据技能类型执行相应的专业分析
-    if skill_type == "medication_safety":
-        safety_result = skills.medication_safety_check(medicine_name)
-        return skills.format_skill_result("药品安全检查", safety_result)
-
-    elif skill_type == "drug_interaction":
-        # 简化的多药分析（实际需要更复杂的提取逻辑）
-        medicines = [medicine_name]
-        interaction_result = skills.drug_interaction_analysis(medicines)
-        return skills.format_skill_result("药物相互作用分析", interaction_result)
-
-    elif skill_type == "patent_medicine":
-        patent_result = skills.patent_medicine_recommendation(user_input)
-        return skills.format_skill_result("中成药推荐", patent_result)
-
-    else:
-        # 默认药品查询
-        return medicine_query_response(user_input)
-
-def disease_consultation_with_skill_response(user_input: str, skill_type: str) -> str:
-    """疾病咨询响应 - 使用专业医疗Skills"""
-    print(f"  -> 执行: 专业Skills [{skill_type}]")
-
-    from skills.intelligent_skills import get_medical_skills
-
-    skills = get_medical_skills()
-
-    # 提取疾病名称
-    disease_name = extract_disease_name(user_input)
-
-    if not disease_name:
-        return rag_medical_traceable_response(user_input)
-
-    # 根据技能类型执行相应的专业分析
-    if skill_type == "tcm_syndrome":
-        syndrome_result = skills.tcm_syndrome_identification(user_input)
-        return skills.format_skill_result("中医证候识别", syndrome_result)
-
-    elif skill_type == "disease_staging":
-        staging_result = skills.disease_staging_diagnosis(disease_name)
-        return skills.format_skill_result("疾病分期诊断", staging_result)
-
-    elif skill_type == "integrated_treatment":
-        integrated_result = skills.integrated_treatment_guidance(disease_name)
-        return skills.format_skill_result("中西医结合诊疗", integrated_result)
-
-    else:
-        # 默认疾病咨询
-        return disease_consultation_response(user_input)
-
-def rag_medical_traceable_response(user_input: str) -> str:
-    """RAG医疗响应 - 提供完整溯源信息"""
-    print("  -> 执行: 可溯源RAG检索")
-
-    try:
-        from skills.intelligent_skills import get_medical_skills
-
-        skills = get_medical_skills()
-
-        # 执行可溯源的RAG查询
-        traceable_result = skills.traceable_rag_query(user_input, top_k=3)
-
-        # 格式化溯源报告
-        output = [
-            "[RAG溯源检索结果]",
-            f"问题: {user_input}",
-            f"检索条数: {traceable_result['retrieval_summary']['total_retrieved']}条",
-            f"数据来源: {traceable_result['retrieval_summary']['database_used']}",
-            f"检索参数: Top-K={traceable_result['retrieval_summary']['top_k']}",
-            "",
-            "[检索到的记录]"
-        ]
-
-        for record in traceable_result['retrieved_records']:
-            output.append(f"记录#{record['record_id']}:")
-            output.append(f"  来源: {record['source']}")
-            output.append(f"  置信度: {record['confidence']}")
-            output.append(f"  内容: {record['content']}")
-            output.append("")
-
-        # 使用LLM生成答案（基于检索到的知识）
-        from utils.llm_client import get_llm_client
-        import config
-
-        llm_client = get_llm_client(config.DEFAULT_MODEL)
-
-        # 构建上下文
-        context = "\n".join([
-            f"记录{i+1}: {record['content']}"
-            for i, record in enumerate(traceable_result['retrieved_records'])
-        ])
-
-        response = llm_client.messages_create(
-            system_prompt="你是专业的医疗助手。基于检索到的医疗知识回答用户问题。",
-            user_message=f"用户问题: {user_input}\n\n检索到的医疗知识:\n{context}",
-            max_tokens=800,
-            temperature=0.5
-        )
-
-        output.append("[AI回答]")
-        output.append(response)
-        output.append("")
-        output.append("[数据溯源]")
-        output.append(f"本次回答基于{traceable_result['retrieval_summary']['total_retrieved']}条RAG检索记录")
-        output.append("来源: RAG医疗知识库 + 868条专业医疗数据")
-
-        return "\n".join(output)
-
-    except Exception as e:
-        print(f"  -> RAG检索失败: {e}")
-        return f"抱歉，检索医疗知识时出错: {str(e)}。请尝试重新提问。"
 
 def medicine_query_response(user_input: str) -> str:
     """药品查询响应 - 强制使用真实数据"""
