@@ -11,14 +11,14 @@ load_dotenv()
 DEFAULT_MODEL = "qwen"
 
 # 千问模型配置（推荐）
-QWEN_BASE_URL = "https://ai.tcmcds.com/v1"
-QWEN_API_KEY = "sk-xBRwP0NV2i0fRRTy9a74Cf18196b4077A2Bd048bCe411bB9"
-QWEN_MODEL = "myllm"
+QWEN_BASE_URL = os.getenv("QWEN_BASE_URL", "https://ai.tcmcds.com/v1")
+QWEN_API_KEY = os.getenv("QWEN_API_KEY", "your-qwen-api-key-here")
+QWEN_MODEL = os.getenv("QWEN_MODEL", "myllm")
 
 # 杏林模型配置
-XINGLIN_BASE_URL = "https://ai.tcmcds.com/v1"
-XINGLIN_API_KEY = "sk-6V4vUePnPQu4fmRJ0232F622807f49E099Ae6e55A23354A7"
-XINGLIN_MODEL = "XinLin"
+XINGLIN_BASE_URL = os.getenv("XINGLIN_BASE_URL", "https://ai.tcmcds.com/v1")
+XINGLIN_API_KEY = os.getenv("XINGLIN_API_KEY", "your-xinglin-api-key-here")
+XINGLIN_MODEL = os.getenv("XINGLIN_MODEL", "XinLin")
 
 # Anthropic模型配置（备用）
 ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY", "")

@@ -46,3 +46,7 @@ chroma_db/
 # Memory
 .claude/
 *.jsonl
+
+# Security - Environment variables
+.env
+.env.local
