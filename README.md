@@ -13,6 +13,7 @@
 - **LangSmith云端监控**: 实时执行追踪，在线数据分析，团队协作共享
 - **Guardrails安全保护**: 5级风险评估，7重安全检查，实时护栏措施
 - **企业级评估**: 13个综合测试用例，多维度评估标准，详细报告生成
+- **API服务部署**: LangServe + Docker支持，云端就绪，微服务架构
 
 ## 系统架构
 
@@ -228,6 +229,433 @@ python setup_model_auto.py     # 自动设置
 ```
 
 **使用场景**: 首次安装，模型更新
+
+---
+
+## 🚀 API服务部署
+
+系统提供完整的API服务部署能力，支持本地部署、Docker容器化和云端部署。
+
+### 快速开始（3步部署）
+
+#### 第1步：启动服务
+```bash
+# Windows用户
+start_deploy.bat
+
+# Linux/Mac用户
+./start_deploy.sh
+
+# 或直接运行
+python deploy.py
+```
+
+#### 第2步：访问服务
+```bash
+# 浏览器打开API文档
+http://localhost:8000/docs
+```
+
+#### 第3步：测试问答
+```bash
+# 在API文档页面
+1. 找到 /qa 端点
+2. 点击 "Try it out"
+3. 输入问题测试
+```
+
+---
+
+### 部署方式详解
+
+#### 方式1：本地LangServe部署
+
+**适合场景**: 开发测试、局域网使用、快速体验
+
+**启动方式**:
+```bash
+# Windows用户
+start_deploy.bat
+
+# Linux/Mac用户
+./start_deploy.sh
+
+# 或直接运行
+python deploy.py
+```
+
+**服务地址**:
+- 🌐 API服务：http://localhost:8000
+- 📖 API文档：http://localhost:8000/docs
+- ❤️ 健康检查：http://localhost:8000/health
+- 💬 问答接口：http://localhost:8000/qa
+
+**API端点说明**:
+
+1. **GET /** - 根路径信息
+   ```bash
+   curl http://localhost:8000/
+   ```
+
+2. **GET /health** - 健康检查
+   ```bash
+   curl http://localhost:8000/health
+   # 返回: {"status": "healthy", "system": "医疗问答多智能体系统", ...}
+   ```
+
+3. **GET /docs** - API文档（Swagger UI）
+   - 自动生成的交互式API文档
+   - 可直接在浏览器中测试所有API
+
+4. **POST /qa** - 医疗问答接口
+   ```bash
+   curl -X POST "http://localhost:8000/qa" \
+     -H "Content-Type: application/json" \
+     -d '{"question": "小儿清热止咳合剂的主要成分是什么？"}'
+   ```
+
+**Python调用示例**:
+```python
+import requests
+
+# 调用医疗问答API
+response = requests.post(
+    "http://localhost:8000/qa",
+    json={"question": "2岁孩子发烧可以用阿司匹林吗？"}
+)
+
+# 获取回答
+answer = response.json()["answer"]
+print(answer)
+```
+
+---
+
+#### 方式2：Docker容器部署
+
+**适合场景**: 生产环境、团队协作、标准化部署
+
+**前提条件**:
+```bash
+# 安装Docker
+# Windows/Mac: https://www.docker.com/products/docker-desktop/
+# Linux: sudo apt install docker.io
+```
+
+**构建和运行**:
+```bash
+# 1. 构建Docker镜像
+docker build -t medical-qa-system .
+
+# 2. 运行容器
+docker run -d \
+  -p 8000:8000 \
+  --name medical-qa-api \
+  medical-qa-system
+
+# 3. 查看日志
+docker logs -f medical-qa-api
+
+# 4. 测试服务
+curl http://localhost:8000/health
+```
+
+**持久化数据运行**:
+```bash
+docker run -d \
+  -p 8000:8000 \
+  --name medical-qa-api \
+  -v $(pwd)/chroma_db:/app/chroma_db \
+  -v $(pwd)/memory:/app/memory \
+  -v $(pwd)/data:/app/data \
+  medical-qa-system
+```
+
+**管理容器**:
+```bash
+# 停止容器
+docker stop medical-qa-api
+
+# 启动容器
+docker start medical-qa-api
+
+# 删除容器
+docker rm medical-qa-api
+
+# 查看运行状态
+docker ps
+```
+
+---
+
+#### 方式3：Docker Compose部署（推荐）
+
+**适合场景**: 完整系统部署、一键启动、环境编排
+
+**一键启动**:
+```bash
+# 启动所有服务
+docker-compose up -d
+
+# 查看运行状态
+docker-compose ps
+
+# 查看日志
+docker-compose logs -f medical-qa-api
+```
+
+**管理服务**:
+```bash
+# 停止服务
+docker-compose stop
+
+# 重启服务
+docker-compose restart
+
+# 停止并删除容器
+docker-compose down
+
+# 重新构建并启动
+docker-compose up -d --build
+```
+
+**扩展实例**:
+```bash
+# 启动3个实例（负载均衡）
+docker-compose up -d --scale medical-qa-api=3
+```
+
+---
+
+### 部署测试
+
+#### 自动化测试
+```bash
+# 运行完整测试套件
+python test_deploy.py
+
+# 测试不同的API地址
+python test_deploy.py http://your-server-ip:8000
+```
+
+#### 手动验证清单
+- [ ] 服务启动成功（无ERROR日志）
+- [ ] 健康检查正常（`curl http://localhost:8000/health`）
+- [ ] API文档可访问（http://localhost:8000/docs）
+- [ ] 问答功能正常（在API文档中测试）
+- [ ] 响应时间合理（< 30秒）
+
+---
+
+### 使用场景示例
+
+#### 场景1：Web应用集成
+```python
+# Flask应用示例
+from flask import Flask, request, jsonify
+import requests
+
+app = Flask(__name__)
+
+@app.route('/api/medical-qa', methods=['POST'])
+def medical_qa():
+    question = request.json.get('question')
+    
+    # 调用医疗问答API
+    response = requests.post(
+        'http://localhost:8000/qa',
+        json={'question': question}
+    )
+    
+    return jsonify(response.json())
+```
+
+#### 场景2：移动端调用
+```javascript
+// JavaScript/移动端调用
+fetch('http://your-server-ip:8000/qa', {
+    method: 'POST',
+    headers: {
+        'Content-Type': 'application/json'
+    },
+    body: JSON.stringify({
+        question: '孕妇可以服用感冒药吗？'
+    })
+})
+.then(response => response.json())
+.then(data => console.log(data.answer));
+```
+
+#### 场景3：批量处理
+```python
+import requests
+import pandas as pd
+
+# 批量问答
+questions = [
+    "小儿清热止咳合剂的主要成分是什么？",
+    "2岁孩子发烧可以用阿司匹林吗？",
+    "孕妇可以服用感冒药吗？"
+]
+
+results = []
+for question in questions:
+    response = requests.post(
+        'http://localhost:8000/qa',
+        json={'question': question}
+    )
+    results.append({
+        'question': question,
+        'answer': response.json()['answer']
+    })
+
+# 保存结果
+df = pd.DataFrame(results)
+df.to_csv('qa_results.csv', index=False)
+```
+
+---
+
+### 云端部署指南
+
+#### 免费云平台（推荐新手）
+
+**1. Railway.app**
+```bash
+# 1. 访问 railway.app 并用GitHub登录
+# 2. 创建新项目，连接GitHub仓库
+# 3. 自动部署，每月$5免费额度
+# 4. 获得公网访问URL
+```
+
+**2. Render.com**
+```bash
+# 1. 访问 render.com
+# 2. 连接GitHub仓库
+# 3. 免费套餐：750小时/月
+# 4. 自动SSL证书
+```
+
+**3. Vercel**
+```bash
+# 1. 访问 vercel.com
+# 2. 导入项目
+# 3. 免费无限请求
+# 4. 全球CDN加速
+```
+
+#### 云服务器部署
+
+**阿里云/腾讯云**
+```bash
+# 1. 租赁云服务器（10-50元/月）
+# 2. 安装Docker
+# 3. 上传代码或克隆仓库
+# 4. 运行Docker容器
+docker run -d -p 80:8000 medical-qa-system
+```
+
+---
+
+### 故障排查
+
+#### 问题1：端口8000被占用
+```bash
+# 查找占用端口的进程
+netstat -ano | findstr :8000  # Windows
+lsof -i :8000                  # Linux/Mac
+
+# 解决方案：更改端口
+# 编辑 deploy.py，修改最后一行：
+uvicorn.run(app, host="0.0.0.0", port=8001)
+```
+
+#### 问题2：Docker构建失败
+```bash
+# 清理Docker缓存
+docker system prune -a
+
+# 使用国内镜像源
+# 编辑 Dockerfile，添加：
+RUN pip config set global.index-url https://pypi.tuna.tsinghua.edu.cn/simple
+```
+
+#### 问题3：服务启动慢
+```bash
+# 正常现象，系统需要：
+# - 加载868条医疗数据
+# - 初始化多智能体系统
+# - 加载中文嵌入模型
+# - 构建向量数据库
+
+# 建议等待30秒后再测试
+```
+
+---
+
+### 性能优化建议
+
+#### 1. 生产环境配置
+```python
+# deploy.py 中使用生产级配置
+if __name__ == "__main__":
+    uvicorn.run(
+        app,
+        host="0.0.0.0",
+        port=8000,
+        workers=4,              # 多进程
+        log_level="warning",     # 减少日志
+        limit_concurrency=100    # 限制并发
+    )
+```
+
+#### 2. Docker资源限制
+```yaml
+# docker-compose.yml
+services:
+  medical-qa-api:
+    deploy:
+      resources:
+        limits:
+          cpus: '2.0'
+          memory: 4G
+```
+
+#### 3. 负载均衡
+```bash
+# 启动多个实例
+docker-compose up -d --scale medical-qa-api=3
+
+# 配置Nginx负载均衡
+upstream medical_backend {
+    server localhost:8001;
+    server localhost:8002;
+    server localhost:8003;
+}
+```
+
+---
+
+### 部署文档
+
+- **DEPLOYMENT_QUICKSTART.md** - 快速开始指南
+- **DEPLOYMENT_GUIDE.md** - 完整部署指南
+- **DEPLOYMENT_STATUS.md** - 部署状态总结
+- **DEPLOYMENT_CHECKLIST.md** - 部署验证清单
+
+---
+
+## 📊 部署架构对比
+
+| 部署方式 | 难度 | 成本 | 适用场景 | 扩展性 |
+|---------|------|------|----------|--------|
+| 本地LangServe | ⭐ | 免费 | 开发测试 | ❌ |
+| Docker容器 | ⭐⭐ | 低 | 生产环境 | ✅ |
+| Docker Compose | ⭐⭐⭐ | 中 | 团队协作 | ✅✅ |
+| 云端部署 | ⭐⭐⭐⭐ | 按需 | 公网服务 | ✅✅✅ |
+| K8s集群 | ⭐⭐⭐⭐⭐ | 高 | 大规模生产 | ✅✅✅✅ |
+
+---
 
 ## 功能特点
 

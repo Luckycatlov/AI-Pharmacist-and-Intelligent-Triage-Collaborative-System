@@ -1,0 +1,66 @@
+version: '3.8'
+
+services:
+  # 医疗问答API服务
+  medical-qa-api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: medical-qa-system
+    ports:
+      - "8000:8000"
+    volumes:
+      # 挂载数据目录（持久化）
+      - ./chroma_db:/app/chroma_db
+      - ./memory:/app/memory
+      - ./evaluation/results:/app/evaluation/results
+      - ./models:/app/models
+      # 挂载数据文件
+      - ./data:/app/data
+    environment:
+      # Python环境
+      - PYTHONUNBUFFERED=1
+      # LangSmith配置（可选）
+      - LANGCHAIN_TRACING_V2=${LANGCHAIN_TRACING_V2:-false}
+      - LANGCHAIN_API_KEY=${LANGCHAIN_API_KEY:-}
+      - LANGCHAIN_PROJECT=${LANGCHAIN_PROJECT:-medical-agent-deployment}
+      # API配置
+      - DEFAULT_MODEL=${DEFAULT_MODEL:-qwen}
+      - QWEN_API_KEY=${QWEN_API_KEY:-}
+      - XINGLIN_API_KEY=${XINGLIN_API_KEY:-}
+      - CLAUDE_API_KEY=${CLAUDE_API_KEY:-}
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "python", "-c", "import requests; requests.get('http://localhost:8000/health')"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    networks:
+      - medical-network
+
+  # Nginx反向代理（可选，用于生产环境）
+  # nginx:
+  #   image: nginx:alpine
+  #   container_name: medical-qa-nginx
+  #   ports:
+  #     - "80:80"
+  #     - "443:443"
+  #   volumes:
+  #     - ./nginx.conf:/etc/nginx/nginx.conf:ro
+  #     - ./ssl:/etc/nginx/ssl:ro
+  #   depends_on:
+  #     - medical-qa-api
+  #   restart: unless-stopped
+  #   networks:
+  #     - medical-network
+
+networks:
+  medical-network:
+    driver: bridge
+
+volumes:
+  chroma_db:
+  memory:
+  evaluation_results:
+  models:

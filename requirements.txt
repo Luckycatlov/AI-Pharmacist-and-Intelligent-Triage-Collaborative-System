@@ -24,3 +24,16 @@ langchain-core>=0.1.0
 
 # Optional but recommended
 python-dotenv>=0.19.0
+
+# Deployment and API serving
+fastapi>=0.104.0
+uvicorn[standard]>=0.24.0
+langserve>=0.0.50
+pydantic>=2.0.0
+
+# LangSmith for cloud monitoring and evaluation
+langsmith>=0.0.80
+
+# Additional utilities
+pyyaml>=6.0
+tqdm>=4.65.0
