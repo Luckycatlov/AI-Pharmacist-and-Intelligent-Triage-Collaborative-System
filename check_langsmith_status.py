@@ -9,7 +9,7 @@ from typing import Dict, Any, Optional
 from datetime import datetime
 
 # 设置LangSmith环境变量
-os.environ["LANGCHAIN_API_KEY"] = "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"
+os.environ["LANGCHAIN_API_KEY"] = ""
 os.environ["LANGCHAIN_TRACING_V2"] = "true"
 
 try:
