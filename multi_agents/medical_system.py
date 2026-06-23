@@ -161,31 +161,39 @@ class MultiAgentMedicalSystem:
 
     def rag_agent(self, question: str, conversation_history: List[Dict]) -> Dict:
         """
-        RAG智能体 - 基于865条真实医疗数据的检索
+        RAG智能体 - 基于865条真实医疗数据的检索，利用对话历史增强
         """
         print(f"[RAG智能体] 执行知识库检索")
         self.stats["rag_agent_calls"] += 1
 
         try:
-            # 获取对话上下文
-            context_with_history = self.memory_manager.get_context_for_query(question)
+            # 🆕 先从对话历史中提取实体信息
+            entities = self.memory_manager.extract_entities_from_history()
+
+            # 🆕 检查是否提到了代词（"这个药"、"那个病"等）
+            enhanced_question = self._enhance_question_with_context(question, entities, conversation_history)
+
+            print(f"[RAG智能体] 原问题: {question}")
+            print(f"[RAG智能体] 增强问题: {enhanced_question}")
 
             # 执行RAG检索
-            results = self.rag.retrieve(question, top_k=3)
+            results = self.rag.retrieve(enhanced_question, top_k=3)
 
             if not results or len(results) == 0:
                 return {
                     "success": False,
                     "retrieval_count": 0,
-                    "answer": "抱歉，未找到相关的医疗知识。"
+                    "answer": "抱歉，未找到相关的医疗知识。",
+                    "entities_extracted": entities
                 }
 
-            # 使用LLM整合检索结果
+            # 使用LLM整合检索结果，并考虑对话历史
             context = self.rag.format_retrieval_context(results)
+            conversation_context = self.memory_manager.format_conversation_context()
 
             response = self.llm_client.messages_create(
-                system_prompt="你是专业的医疗助手。基于检索到的医疗知识回答用户问题。",
-                user_message=f"用户问题: {question}\n\n{context}",
+                system_prompt="你是专业的医疗助手。基于检索到的医疗知识和对话历史回答用户问题。如果用户提到'这个药'或'那个病'，请从对话历史中找到具体指的是什么。",
+                user_message=f"用户问题: {question}\n\n对话历史:\n{conversation_context}\n\n检索依据:\n{context}",
                 max_tokens=800,
                 temperature=0.3
             )
@@ -199,7 +207,8 @@ class MultiAgentMedicalSystem:
 ---
 数据来源: RAG医疗知识库 (865条真实医疗记录)
 [提示] 本回答仅供参考，如有不适请及时就医。""",
-                "data_source": "865条真实医疗数据"
+                "data_source": "865条真实医疗数据",
+                "entities_extracted": entities
             }
 
         except Exception as e:
@@ -208,6 +217,75 @@ class MultiAgentMedicalSystem:
                 "error": str(e),
                 "answer": f"抱歉，检索医疗知识时出错: {str(e)}。"
             }
+
+    def _enhance_question_with_context(self, question: str, entities: Dict, conversation_history: List[Dict]) -> str:
+        """
+        利用对话历史增强问题 - 解决"这个药"、"那个病"等代词问题
+        """
+        # 检测代词
+        pronouns_patterns = {
+            r"这个药": "药品",
+            r"那个药": "药品",
+            r"此药": "药品",
+            r"该药": "药品",
+            r"这种药": "药品",
+            r"这个病": "疾病",
+            r"那个病": "疾病",
+            r"此病": "疾病",
+            r"该病": "疾病"
+        }
+
+        import re
+        enhanced_question = question
+
+        for pattern, entity_type in pronouns_patterns.items():
+            if re.search(pattern, question):
+                print(f"[RAG智能体] 检测到代词，需要从对话历史中查找具体{entity_type}")
+
+                # 从对话历史中查找最近提到的具体实体
+                if entity_type == "药品":
+                    medicine = self._find_latest_medicine(conversation_history)
+                    if medicine:
+                        enhanced_question = question.replace(re.search(pattern, question).group(), medicine)
+                        print(f"[RAG智能体] 找到历史药品: {medicine}")
+
+                elif entity_type == "疾病":
+                    disease = self._find_latest_disease(conversation_history)
+                    if disease:
+                        enhanced_question = question.replace(re.search(pattern, question).group(), disease)
+                        print(f"[RAG智能体] 找到历史疾病: {disease}")
+
+                break
+
+        return enhanced_question
+
+    def _find_latest_medicine(self, conversation_history: List[Dict]) -> str:
+        """从对话历史中查找最近提到的药品"""
+        # 搜索最近的用户消息中提到的药品
+        for msg in reversed(conversation_history):
+            if msg["role"] == "user":
+                content = msg["content"]
+                # 检查是否包含已知药品名称
+                from data.data_loader import get_data_loader
+                data_loader = get_data_loader()
+
+                if data_loader.medicine_manuals is not None:
+                    for medicine in data_loader.medicine_manuals['药品名称']:
+                        if isinstance(medicine, str) and medicine in content:
+                            return medicine
+        return ""
+
+    def _find_latest_disease(self, conversation_history: List[Dict]) -> str:
+        """从对话历史中查找最近提到的疾病"""
+        common_diseases = ["糖尿病", "高血压", "感冒", "头痛", "发热", "咳嗽"]
+
+        for msg in reversed(conversation_history):
+            if msg["role"] == "user":
+                content = msg["content"]
+                for disease in common_diseases:
+                    if disease in content:
+                        return disease
+        return ""
 
     def supervisor_agent(self, question: str) -> Dict:
         """
@@ -362,7 +440,7 @@ if LANGGRAPH_AVAILABLE:
             state['final_answer'] = result['answer']
             return state
 
-        def decide_next_node(state: MedicalState) -> Literal["chat_node", "data_query_node", "rag_node", END]:
+        def decide_next_node(state: MedicalState) -> str:
             """决策下一个节点"""
             question_type = state['question_type']
 

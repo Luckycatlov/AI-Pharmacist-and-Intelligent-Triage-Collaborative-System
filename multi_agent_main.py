@@ -27,39 +27,49 @@ def process_with_multi_agent_memory(user_input: str) -> str:
     system = get_multi_agent_system()
 
     # 如果LangGraph可用，使用图结构
-    try:
-        workflow = create_medical_graph()
-        print(f"[多智能体] 使用LangGraph工作流")
+        try:
+            workflow = create_medical_graph()
+            print(f"[多智能体] 使用LangGraph工作流")
 
-        # 创建初始状态
-        from multi_agents.medical_system import MedicalState
-        initial_state = MedicalState(
-            question=user_input,
-            question_type="",
-            conversation_history=system.memory_manager.get_conversation_history(),
-            analysis_result={},
-            rag_result={},
-            data_result={},
-            final_answer="",
-            metadata={}
-        )
+            # 创建初始状态
+            from multi_agents.medical_system import MedicalState
+            initial_state = MedicalState(
+                question=user_input,
+                question_type="",
+                conversation_history=system.memory_manager.get_conversation_history(),
+                analysis_result={},
+                rag_result={},
+                data_result={},
+                final_answer="",
+                metadata={}
+            )
 
-        # 执行工作流
-        final_state = workflow.invoke(initial_state)
-        result = final_state['final_answer']
+            # 🆕 修复API调用方式
+            try:
+                # 方法1: 使用invoke (新版LangGraph)
+                final_state = workflow.invoke(initial_state)
+            except AttributeError:
+                # 方法2: 使用stream (旧版LangGraph)
+                print(f"[多智能体] 使用旧版LangGraph API")
+                for state_snapshot in workflow.stream(initial_state):
+                    final_state = state_snapshot
 
-        # 添加系统统计信息
-        stats = system.get_system_stats()
-        result += f"\n\n[系统统计]"
-        result += f"\n处理方式: {stats['智能体调用统计']}"
-        result += f"\n对话轮数: {stats['对话轮数']}"
-        result += f"\n会话ID: {stats['当前会话']}"
+            result = final_state['final_answer']
 
-        return result
+            # 添加系统统计信息
+            stats = system.get_system_stats()
+            result += f"\n\n[系统统计]"
+            result += f"\n处理方式: {stats['智能体调用统计']}"
+            result += f"\n对话轮数: {stats['对话轮数']}"
+            result += f"\n会话ID: {stats['当前会话']}"
 
-    except Exception as e:
-        print(f"[多智能体] LangGraph执行失败: {e}")
-        print(f"[多智能体] 使用简化的多智能体处理")
+            return result
+
+        except Exception as e:
+            print(f"[多智能体] LangGraph执行失败: {e}")
+            import traceback
+            traceback.print_exc()
+            print(f"[多智能体] 使用简化的多智能体处理")
 
         # 降级到简化版本
         result = system.supervisor_agent(user_input)
