@@ -312,8 +312,33 @@ class MedicalRAG:
         if top_k is None:
             top_k = config.TOP_K_RETRIEVAL
 
-        # 编码查询
-        query_embedding = self.embedder.encode([query]).tolist()
+        # 编码查询（绕过sentence-transformers类型检查问题）
+        try:
+            print(f"[RAG] 开始编码查询: {query[:30]}...")
+
+            # 尝试直接调用底层模型
+            try:
+                # 使用底层模型的forward方法
+                import torch
+                features = self.embedder.tokenize([query])
+                with torch.no_grad():
+                    embedding = self.embedder(features)['sentence_embedding']
+                query_embedding = embedding.cpu().numpy().tolist()
+                print(f"[RAG] 底层模型编码成功，维度: {len(query_embedding)}")
+            except Exception as e1:
+                print(f"[RAG] 底层模型编码失败: {e1}")
+                # 回退到标准方法
+                try:
+                    embedding = self.embedder.encode(str(query), show_progress_bar=False, convert_to_numpy=True)
+                    query_embedding = embedding.tolist() if hasattr(embedding, 'tolist') else list(embedding)
+                    print(f"[RAG] 标准编码成功，维度: {len(query_embedding)}")
+                except Exception as e2:
+                    print(f"[RAG] 标准编码失败: {e2}")
+                    raise Exception(f"所有编码方法都失败: {e2}")
+
+        except Exception as e:
+            print(f"[RAG] 编码过程异常: {e}")
+            raise Exception(f"无法编码查询 '{query[:30]}...': {e}")
 
         # 检索
         results = self.collection.query(

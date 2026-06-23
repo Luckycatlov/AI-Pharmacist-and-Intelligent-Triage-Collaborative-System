@@ -172,25 +172,49 @@ class ConversationMemory:
             "questions_asked": []
         }
 
-        # 简单的关键词提取 (可以后续用LLM增强)
-        symptom_keywords = ["痛", "热", "咳", "晕", "泻", "乏", "眠"]
-        medicine_keywords = ["药", "服用", "注射", "用"]
+        # 症状关键词提取
+        symptom_keywords = ["痛", "热", "咳", "晕", "泻", "乏", "眠", "炎", "症"]
+
+        # 🆕 尝试导入数据加载器以进行精确的药品名称提取
+        try:
+            from data.data_loader import get_data_loader
+            data_loader = get_data_loader()
+            medicine_names = data_loader.medicine_manuals['药品名称'].tolist() if data_loader.medicine_manuals is not None else []
+            disease_names = []
+            if data_loader.tcm_consensus is not None:
+                disease_names = data_loader.tcm_consensus['病名'].tolist()
+        except:
+            medicine_names = []
+            disease_names = []
 
         for msg in history:
-            if msg["role"] == "user":
-                content = msg["content"]
-                entities["questions_asked"].append(content)
+            content = msg["content"]
 
-                # 提取症状关键词
-                for keyword in symptom_keywords:
-                    if keyword in content:
-                        entities["symptoms"].add(keyword)
+            # 提取所有问题和回答（不仅限于用户消息）
+            entities["questions_asked"].append(content[:50])  # 保存问题的前50个字符
 
-                # 提取药品相关信息
-                if any(kw in content for kw in medicine_keywords):
-                    entities["medicines"].add(content[:20])  # 简化提取
+            # 提取症状关键词
+            for keyword in symptom_keywords:
+                if keyword in content:
+                    entities["symptoms"].add(keyword)
 
-        return entities
+            # 🆕 精确提取药品名称
+            for medicine in medicine_names:
+                if isinstance(medicine, str) and medicine in content:
+                    entities["medicines"].add(medicine)
+
+            # 🆕 精确提取疾病名称
+            for disease in disease_names:
+                if isinstance(disease, str) and disease in content:
+                    entities["diseases"].add(disease)
+
+        # 转换set为list以便JSON序列化
+        return {
+            "symptoms": list(entities["symptoms"]),
+            "medicines": list(entities["medicines"]),
+            "diseases": list(entities["diseases"]),
+            "questions_asked": entities["questions_asked"]
+        }
 
     def save_to_disk(self, session_id: str = None):
         """保存对话记忆到磁盘"""

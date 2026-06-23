@@ -164,17 +164,27 @@ class MultiAgentMedicalSystem:
         RAG智能体 - 基于865条真实医疗数据的检索，利用对话历史增强
         """
         print(f"[RAG智能体] 执行知识库检索")
+        print(f"[RAG智能体] 对话历史轮数: {len(conversation_history)}")
         self.stats["rag_agent_calls"] += 1
 
         try:
             # 🆕 先从对话历史中提取实体信息
             entities = self.memory_manager.extract_entities_from_history()
+            print(f"[RAG智能体] 提取的实体: 药品={list(entities['medicines'])}, 症状={list(entities['symptoms'])}")
 
             # 🆕 检查是否提到了代词（"这个药"、"那个病"等）
             enhanced_question = self._enhance_question_with_context(question, entities, conversation_history)
 
             print(f"[RAG智能体] 原问题: {question}")
             print(f"[RAG智能体] 增强问题: {enhanced_question}")
+
+            # 🆕 如果增强问题仍然是原问题（没有找到代词），尝试从实体中提取
+            if enhanced_question == question and entities.get('medicines'):
+                latest_medicine = list(entities['medicines'])[-1]  # 获取最近提到的药品
+                if latest_medicine:
+                    print(f"[RAG智能体] 从实体提取中使用药品: {latest_medicine}")
+                    # 将药品名称添加到问题中以增强检索
+                    enhanced_question = f"{latest_medicine} {question}"
 
             # 执行RAG检索
             results = self.rag.retrieve(enhanced_question, top_k=3)
@@ -261,18 +271,22 @@ class MultiAgentMedicalSystem:
 
     def _find_latest_medicine(self, conversation_history: List[Dict]) -> str:
         """从对话历史中查找最近提到的药品"""
-        # 搜索最近的用户消息中提到的药品
-        for msg in reversed(conversation_history):
-            if msg["role"] == "user":
-                content = msg["content"]
-                # 检查是否包含已知药品名称
-                from data.data_loader import get_data_loader
-                data_loader = get_data_loader()
+        from data.data_loader import get_data_loader
+        data_loader = get_data_loader()
 
-                if data_loader.medicine_manuals is not None:
-                    for medicine in data_loader.medicine_manuals['药品名称']:
-                        if isinstance(medicine, str) and medicine in content:
-                            return medicine
+        if data_loader.medicine_manuals is None:
+            return ""
+
+        # 搜索所有消息（用户和助手）中提到的药品
+        for msg in reversed(conversation_history):
+            content = msg["content"]
+
+            # 检查是否包含已知药品名称
+            for medicine in data_loader.medicine_manuals['药品名称']:
+                if isinstance(medicine, str) and medicine in content:
+                    print(f"[历史药品] 在{msg['role']}消息中找到: {medicine}")
+                    return medicine
+
         return ""
 
     def _find_latest_disease(self, conversation_history: List[Dict]) -> str:
@@ -391,13 +405,23 @@ class MultiAgentMedicalSystem:
 
         return "\n".join(output)
 
+# 全局系统实例（用于LangGraph）
+_langgraph_system = None
+
+def get_langgraph_system() -> MultiAgentMedicalSystem:
+    """获取用于LangGraph的全局系统实例"""
+    global _langgraph_system
+    if _langgraph_system is None:
+        _langgraph_system = MultiAgentMedicalSystem()
+    return _langgraph_system
+
 # 如果LangGraph可用，创建图结构
 if LANGGRAPH_AVAILABLE:
     def create_medical_graph() -> StateGraph:
         """创建LangGraph医疗系统图"""
 
-        # 初始化系统
-        system = MultiAgentMedicalSystem()
+        # 使用全局系统实例
+        system = get_langgraph_system()
 
         def route_question(state: MedicalState) -> MedicalState:
             """路由智能体节点"""
@@ -417,10 +441,12 @@ if LANGGRAPH_AVAILABLE:
         def data_query_node(state: MedicalState) -> MedicalState:
             """数据查询智能体节点"""
             print(f"[图节点] 数据查询")
+            # 确保使用最新的对话历史
+            current_history = system.memory_manager.get_conversation_history()
             result = system.data_query_agent(
                 state['question'],
                 state['question_type'],
-                state.get('conversation_history', [])
+                current_history
             )
             state['data_result'] = result
 
@@ -428,14 +454,21 @@ if LANGGRAPH_AVAILABLE:
                 state['final_answer'] = result['answer']
             else:
                 # 数据查询失败，转向RAG
-                state['final_answer'] = "数据查询未找到结果，需要使用RAG检索"
+                print(f"[图节点] 数据查询未找到结果，转向RAG检索")
+                # 直接调用RAG智能体（会自动使用对话历史增强问题）
+                rag_result = system.rag_agent(state['question'], current_history)
+                state['rag_result'] = rag_result
+                state['final_answer'] = rag_result['answer']
+                print(f"[图节点] RAG检索完成，已获取答案")
 
             return state
 
         def rag_node(state: MedicalState) -> MedicalState:
             """RAG智能体节点"""
             print(f"[图节点] RAG检索")
-            result = system.rag_agent(state['question'], state.get('conversation_history', []))
+            # 确保使用最新的对话历史
+            current_history = system.memory_manager.get_conversation_history()
+            result = system.rag_agent(state['question'], current_history)
             state['rag_result'] = result
             state['final_answer'] = result['answer']
             return state
@@ -504,7 +537,15 @@ if LANGGRAPH_AVAILABLE:
         workflow.add_edge("rag_node", "final_response")
         workflow.add_edge("final_response", END)
 
-        return workflow
+        # 🔧 编译图结构 - 这是关键步骤！
+        try:
+            compiled_workflow = workflow.compile()
+            print("[LangGraph] 图结构编译成功")
+            return compiled_workflow
+        except Exception as e:
+            print(f"[LangGraph] 编译失败: {e}")
+            # 如果编译失败，返回未编译的图
+            return workflow
 
 def get_multi_agent_system() -> MultiAgentMedicalSystem:
     """获取多智能体系统实例"""

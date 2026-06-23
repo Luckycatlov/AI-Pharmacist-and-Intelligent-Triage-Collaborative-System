@@ -1,0 +1,9 @@
+{
+  "api_key_configured": true,
+  "api_key_preview": "lsv2_pt_cefb390cc0c5...",
+  "project_name": "medical-agent-evaluation",
+  "tracing_enabled": true,
+  "api_endpoint": "https://api.smith.langchain.com",
+  "dashboard_url": "https://smith.langchain.com/",
+  "setup_time": "2026-06-23T20:28:39.296176"
+}

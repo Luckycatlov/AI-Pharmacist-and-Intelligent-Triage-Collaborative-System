@@ -11,11 +11,13 @@ os.environ['CHROMA_TELEMETRY'] = 'false'
 
 from multi_agents.medical_system import get_multi_agent_system, create_medical_graph
 
+
 def print_header():
     print("=" * 60)
     print("    医药问答系统 (多智能体 + 记忆层版本)")
     print("   868条真实数据 + 多智能体协同 + 对话记忆")
     print("=" * 60)
+
 
 def process_with_multi_agent_memory(user_input: str) -> str:
     """
@@ -27,49 +29,74 @@ def process_with_multi_agent_memory(user_input: str) -> str:
     system = get_multi_agent_system()
 
     # 如果LangGraph可用，使用图结构
-        try:
-            workflow = create_medical_graph()
-            print(f"[多智能体] 使用LangGraph工作流")
+    try:
+        workflow = create_medical_graph()
+        print(f"[多智能体] 使用LangGraph工作流")
 
-            # 创建初始状态
-            from multi_agents.medical_system import MedicalState
-            initial_state = MedicalState(
-                question=user_input,
-                question_type="",
-                conversation_history=system.memory_manager.get_conversation_history(),
-                analysis_result={},
-                rag_result={},
-                data_result={},
-                final_answer="",
-                metadata={}
-            )
+        # 使用LangGraph系统的记忆管理器（确保一致性）
+        from multi_agents.medical_system import get_langgraph_system
+        langgraph_system = get_langgraph_system()
 
-            # 🆕 修复API调用方式
-            try:
-                # 方法1: 使用invoke (新版LangGraph)
-                final_state = workflow.invoke(initial_state)
-            except AttributeError:
-                # 方法2: 使用stream (旧版LangGraph)
-                print(f"[多智能体] 使用旧版LangGraph API")
-                for state_snapshot in workflow.stream(initial_state):
-                    final_state = state_snapshot
+        # 创建新会话（如果不存在）
+        if langgraph_system.memory_manager.current_session_id is None:
+            langgraph_system.memory_manager.create_session()
 
+        # 确保使用最新的对话历史
+        current_history = langgraph_system.memory_manager.get_conversation_history()
+        print(f"[调试] 当前对话历史轮数: {len(current_history)}")
+
+        # 创建初始状态
+        from multi_agents.medical_system import MedicalState
+        initial_state = MedicalState(
+            question=user_input,
+            question_type="",
+            conversation_history=current_history,
+            analysis_result={},
+            rag_result={},
+            data_result={},
+            final_answer="",
+            metadata={}
+        )
+
+        # 🆕 修复API调用方式 - 支持多种LangGraph版本
+        final_state = None
+
+        # 方法1: 使用invoke (新版LangGraph 0.2+)
+        if hasattr(workflow, 'invoke'):
+            print(f"[多智能体] 使用invoke API")
+            final_state = workflow.invoke(initial_state)
+        # 方法2: 使用run (某些LangGraph版本)
+        elif hasattr(workflow, 'run'):
+            print(f"[多智能体] 使用run API")
+            final_state = workflow.run(initial_state)
+        # 方法3: 使用stream (旧版LangGraph)
+        elif hasattr(workflow, 'stream'):
+            print(f"[多智能体] 使用stream API")
+            for state_snapshot in workflow.stream(initial_state):
+                final_state = state_snapshot
+        else:
+            raise AttributeError("找不到合适的执行方法")
+
+        # 获取最终答案
+        if isinstance(final_state, dict) and 'final_answer' in final_state:
             result = final_state['final_answer']
+        else:
+            raise ValueError("无法从状态中获取最终答案")
 
-            # 添加系统统计信息
-            stats = system.get_system_stats()
-            result += f"\n\n[系统统计]"
-            result += f"\n处理方式: {stats['智能体调用统计']}"
-            result += f"\n对话轮数: {stats['对话轮数']}"
-            result += f"\n会话ID: {stats['当前会话']}"
+        # 添加系统统计信息
+        stats = langgraph_system.get_system_stats()
+        result += f"\n\n[系统统计]"
+        result += f"\n处理方式: {stats['智能体调用统计']}"
+        result += f"\n对话轮数: {stats['对话轮数']}"
+        result += f"\n会话ID: {stats['当前会话']}"
 
-            return result
+        return result
 
-        except Exception as e:
-            print(f"[多智能体] LangGraph执行失败: {e}")
-            import traceback
-            traceback.print_exc()
-            print(f"[多智能体] 使用简化的多智能体处理")
+    except (AttributeError, ValueError, KeyError, TypeError) as api_error:
+        print(f"[多智能体] LangGraph执行失败: {api_error}")
+        print(f"[多智能体] 使用简化的多智能体处理")
+        import traceback
+        traceback.print_exc()
 
         # 降级到简化版本
         result = system.supervisor_agent(user_input)
@@ -83,6 +110,7 @@ def process_with_multi_agent_memory(user_input: str) -> str:
         answer += f"\n置信度: {result['confidence']:.2f}"
 
         return answer
+
 
 def main():
     """主程序"""
@@ -106,10 +134,10 @@ def main():
         print("[OK] 多智能体系统初始化完成")
 
         print("\n[系统特色]")
-        print("  🤖 多智能体协同 - 路由/聊天/数据/RAG智能体")
-        print("  🧠 对话记忆层 - 支持多轮问诊上下文")
-        print("  📊 真实医疗数据 - 868条专业医疗记录")
-        print("  🔍 RAG知识检索 - 865条真实数据知识库")
+        print("  [多智能体] 多智能体协同 - 路由/聊天/数据/RAG智能体")
+        print("  [记忆层] 对话记忆层 - 支持多轮问诊上下文")
+        print("  [真实数据] 真实医疗数据 - 868条专业医疗记录")
+        print("  [RAG检索] RAG知识检索 - 865条真实数据知识库")
 
         print(f"\n[数据基础]")
         print(f"  药品说明书: {len(data_loader_obj.medicine_manuals)}条")
@@ -187,6 +215,7 @@ def main():
         return 1
 
     return 0
+
 
 if __name__ == "__main__":
     sys.exit(main())
