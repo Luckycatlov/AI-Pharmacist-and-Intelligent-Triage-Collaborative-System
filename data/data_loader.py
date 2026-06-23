@@ -160,9 +160,12 @@ class MedicalDataLoader:
         if self.integrated_medicine is None:
             return []
 
+        # 检查列名是否存在，动态适配
+        disease_col = '疾病' if '疾病' in self.integrated_medicine.columns else self.integrated_medicine.columns[4]
+
         # 查找相关指南
         results = self.integrated_medicine[
-            self.integrated_medicine['疾病'].astype(str).str.contains(disease, na=False)
+            self.integrated_medicine[disease_col].astype(str).str.contains(disease, na=False)
         ]
 
         if len(results) > 0:
