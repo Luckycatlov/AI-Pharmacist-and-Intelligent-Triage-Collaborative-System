@@ -158,7 +158,7 @@ class APITester:
         print("\n[详细结果]")
         for i, result in enumerate(self.results, 1):
             status = result.get("status")
-            status_symbol = "✓" if status == "PASS" else "✗" if status == "FAIL" else "!"
+            status_symbol = "[OK]" if status == "PASS" else "[FAIL]" if status == "FAIL" else "[WARN]"
             print(f"  {i}. {status_symbol} {result.get('test')}: {status}")
 
         # 保存JSON报告

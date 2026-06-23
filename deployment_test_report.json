@@ -1,0 +1,32 @@
+{
+  "timestamp": "2026-06-23 22:17:03",
+  "total_tests": 4,
+  "passed": 4,
+  "failed": 0,
+  "success_rate": 100.0,
+  "results": [
+    {
+      "test": "健康检查",
+      "status": "PASS",
+      "response_time": 2.039821
+    },
+    {
+      "test": "根路径",
+      "status": "PASS",
+      "response_time": 2.054813
+    },
+    {
+      "test": "医疗问答",
+      "status": "PASS",
+      "response_time": 9.43520712852478,
+      "answer_length": 211
+    },
+    {
+      "test": "批量问答",
+      "status": "PASS",
+      "success_rate": 100.0,
+      "total": 2,
+      "success": 2
+    }
+  ]
+}
