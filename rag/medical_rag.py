@@ -1,5 +1,5 @@
 """
-RAG医疗知识库系统 - 支持离线/国内镜像
+RAG医疗知识库系统 - 基于真实868条医疗数据
 """
 from typing import List, Dict
 import os
@@ -9,6 +9,7 @@ import config
 import warnings
 import logging
 import sys
+import pandas as pd
 
 # 在导入任何库之前禁用telemetry
 os.environ['SENTENCE_TRANSFORMERS_NO_TELEMETRY'] = '1'
@@ -123,111 +124,179 @@ class MedicalRAG:
             )
 
     def _initialize_knowledge_base(self):
-        """初始化医疗知识库"""
+        """初始化医疗知识库 - 基于868条真实医疗数据"""
         # 检查是否已有数据
         if self.collection.count() > 0:
+            print("[RAG] 知识库已存在，跳过初始化")
             return
 
-        # 医疗知识库（模拟数据）
-        knowledge_base = [
-            {
-                "text": "头痛是一种常见的症状，可能由紧张、偏头痛、高血压、颈椎病等引起。对于轻微头痛，可休息、多喝水；如持续严重应就医检查明确病因。",
-                "category": "症状知识",
-                "keywords": ["头痛", "头疼", "头部疼痛"]
-            },
-            {
-                "text": "发热是身体对感染或炎症的反应。体温超过37.3℃为低热，超过38.5℃为中高热。低热可物理降温（温水擦浴），高热需使用退热药（如对乙酰氨基酚）并就医。",
-                "category": "症状知识",
-                "keywords": ["发热", "发烧", "体温高"]
-            },
-            {
-                "text": "咳嗽是呼吸道疾病的常见症状。急性咳嗽多由感冒引起，一般1-2周自愈。如咳嗽持续超过3周或伴有胸痛、咳血，应立即就医进行胸部CT等检查。",
-                "category": "症状知识",
-                "keywords": ["咳嗽", "干咳", "咳痰"]
-            },
-            {
-                "text": "腹痛病因复杂，可能涉及消化系统、泌尿系统、妇科等。如腹痛剧烈、持续超过6小时、伴有呕吐或便血，应立即急诊就医，勿自行服药。",
-                "category": "症状知识",
-                "keywords": ["腹痛", "肚子痛", "胃痛"]
-            },
-            {
-                "text": "胸痛可能是心脏病、肺部疾病或肌肉骨骼问题引起。如出现胸痛伴呼吸困难、冷汗、恶心，可能是心肌梗死，需立即拨打120急救。不要自行驾车就医。",
-                "category": "急症知识",
-                "keywords": ["胸痛", "胸口痛", "胸闷"]
-            },
-            {
-                "text": "高血压患者应定期监测血压，坚持服药。如血压持续高于140/90mmHg，需调整药物。建议低盐饮食、适量运动、控制体重。避免突然停药。",
-                "category": "慢病管理",
-                "keywords": ["高血压", "血压高"]
-            },
-            {
-                "text": "糖尿病患者需定期监测血糖，按时用药或注射胰岛素。出现低血糖（心慌、出汗）时应立即补充糖分。定期检查眼底、肾功能，预防并发症。",
-                "category": "慢病管理",
-                "keywords": ["糖尿病", "血糖"]
-            },
-            {
-                "text": "导诊建议：头痛患者可先就诊神经内科。如伴有视力异常，可同时考虑眼科；如有外伤史，就诊神经外科。突发剧烈头痛需急诊排除脑血管意外。",
-                "category": "导诊建议",
-                "keywords": ["头痛", "导诊", "科室"]
-            },
-            {
-                "text": "导诊建议：发热患者可先就诊发热门诊或内科。如伴有咳嗽、呼吸困难，就诊呼吸内科；如伴有腹泻、腹痛，就诊消化内科；高热不退建议急诊。",
-                "category": "导诊建议",
-                "keywords": ["发热", "发烧", "导诊"]
-            },
-            {
-                "text": "导诊建议：腹痛患者根据部位就诊。上腹痛多考虑消化内科；下腹痛右侧考虑阑尾炎（普外科），左侧考虑妇科（女性）；尿痛伴发热考虑泌尿外科。",
-                "category": "导诊建议",
-                "keywords": ["腹痛", "肚子痛", "导诊"]
-            },
-            {
-                "text": "导诊建议：咳嗽患者主要就诊呼吸内科。如咳嗽超过3周或伴有痰中带血，需做胸部CT。儿童咳嗽就诊儿科，孕妇咳嗽就诊产科高危门诊。",
-                "category": "导诊建议",
-                "keywords": ["咳嗽", "导诊", "科室"]
-            },
-            {
-                "text": "用药安全：不可同时服用多种含相同成分的感冒药，可能造成药物过量损伤肝肾。服药期间禁止饮酒，可能加重不良反应或产生毒性。",
-                "category": "用药安全",
-                "keywords": ["用药", "安全", "药物"]
-            },
-            {
-                "text": "儿童用药需特别谨慎，严格按体重计算剂量，不可使用成人药。阿司匹林儿童禁用（可能引起瑞氏综合征）。建议使用儿童专用剂型。",
-                "category": "用药安全",
-                "keywords": ["儿童", "用药", "安全"]
-            },
-            {
-                "text": "老年人用药应遵循'小剂量开始，缓慢递增'原则。肝肾功能减退者需调整剂量。注意药物相互作用，建议将所有用药清单带给医生审核。",
-                "category": "用药安全",
-                "keywords": ["老人", "老年人", "用药"]
-            },
-            {
-                "text": "孕妇用药应谨慎。妊娠早期（前3个月）尽量避免用药，必须用药时选择B类药物。禁止使用四环素、喹诺酮类、ACEI/ARB类药物。就诊时告知怀孕情况。",
-                "category": "用药安全",
-                "keywords": ["孕妇", "妊娠", "用药"]
-            }
-        ]
+        print("[RAG] 开始加载真实医疗数据到知识库...")
 
-        # 添加知识到向量数据库
-        texts = [item["text"] for item in knowledge_base]
-        metadatas = [
-            {
-                "category": item["category"],
-                "keywords": ",".join(item["keywords"])
-            }
-            for item in knowledge_base
-        ]
-        ids = [f"doc_{i}" for i in range(len(knowledge_base))]
+        # 延迟导入避免循环依赖
+        from data.data_loader import get_data_loader
 
-        embeddings = self.embedder.encode(texts).tolist()
+        data_loader = get_data_loader()
+        knowledge_base = []
 
-        self.collection.add(
-            embeddings=embeddings,
-            documents=texts,
-            metadatas=metadatas,
-            ids=ids
-        )
+        # 1. 加载599条药品说明书数据
+        print("[RAG] 加载药品说明书数据...")
+        if data_loader.medicine_manuals is not None:
+            for _, row in data_loader.medicine_manuals.iterrows():
+                # 跳过空数据
+                if pd.isna(row.get('药品名称', '')):
+                    continue
 
-        print(f"[OK] 已初始化医疗知识库，共 {len(knowledge_base)} 条记录")
+                medicine_text = self._format_medicine_text(row)
+                knowledge_base.append({
+                    "text": medicine_text,
+                    "category": "药品说明书",
+                    "source": "药品说明书数据库",
+                    "medicine_name": str(row.get('药品名称', ''))
+                })
+
+        # 2. 加载92条中医专家共识数据
+        print("[RAG] 加载中医专家共识数据...")
+        if data_loader.tcm_consensus is not None:
+            for _, row in data_loader.tcm_consensus.iterrows():
+                if pd.isna(row.get('文章标题', '')):
+                    continue
+
+                tcm_text = self._format_tcm_text(row)
+                knowledge_base.append({
+                    "text": tcm_text,
+                    "category": "中医专家共识",
+                    "source": "中医专家共识数据库",
+                    "disease": str(row.get('病名', ''))
+                })
+
+        # 3. 加载45条中成药数据
+        print("[RAG] 加载中成药数据...")
+        if data_loader.patent_medicine is not None:
+            for _, row in data_loader.patent_medicine.iterrows():
+                if pd.isna(row.get('药品名称', '')):
+                    continue
+
+                patent_text = self._format_patent_medicine_text(row)
+                knowledge_base.append({
+                    "text": patent_text,
+                    "category": "中成药",
+                    "source": "中成药数据库",
+                    "medicine_name": str(row.get('药品名称', ''))
+                })
+
+        # 4. 加载132条中西医指南数据
+        print("[RAG] 加载中西医指南数据...")
+        if data_loader.integrated_medicine is not None:
+            for _, row in data_loader.integrated_medicine.iterrows():
+                if pd.isna(row.get('文章标题', '')):
+                    continue
+
+                integrated_text = self._format_integrated_medicine_text(row)
+                knowledge_base.append({
+                    "text": integrated_text,
+                    "category": "中西医结合指南",
+                    "source": "中西医结合指南数据库",
+                    "disease": str(row.get('疾病', ''))
+                })
+
+        print(f"[RAG] 数据加载完成，共 {len(knowledge_base)} 条记录")
+
+        # 批量添加到向量数据库（分批处理，避免内存问题）
+        batch_size = 100
+        for i in range(0, len(knowledge_base), batch_size):
+            batch = knowledge_base[i:i+batch_size]
+            texts = [item["text"] for item in batch]
+            metadatas = [
+                {
+                    "category": item["category"],
+                    "source": item["source"],
+                    **({"medicine_name": item["medicine_name"]} if "medicine_name" in item else {}),
+                    **({"disease": item["disease"]} if "disease" in item else {})
+                }
+                for item in batch
+            ]
+            ids = [f"{item['category']}_{i+j}" for j, item in enumerate(batch)]
+
+            print(f"[RAG] 正在向量化第 {i+1}-{min(i+batch_size, len(knowledge_base))} 条记录...")
+
+            try:
+                embeddings = self.embedder.encode(texts).tolist()
+
+                self.collection.add(
+                    embeddings=embeddings,
+                    documents=texts,
+                    metadatas=metadatas,
+                    ids=ids
+                )
+            except Exception as e:
+                print(f"[ERROR] 批次 {i+1}-{min(i+batch_size, len(knowledge_base))} 向量化失败: {e}")
+
+        print(f"[OK] 已初始化RAG知识库，共 {len(knowledge_base)} 条真实医疗记录")
+
+    def _format_medicine_text(self, row) -> str:
+        """格式化药品说明书数据为文本"""
+        parts = []
+        parts.append(f"药品名称：{row.get('药品名称', '')}")
+        if not pd.isna(row.get('主要成份', '')):
+            parts.append(f"主要成分：{row.get('主要成份', '')}")
+        if not pd.isna(row.get('适应症', '')):
+            parts.append(f"适应症：{row.get('适应症', '')}")
+        if not pd.isna(row.get('用法用量', '')):
+            parts.append(f"用法用量：{row.get('用法用量', '')}")
+        if not pd.isna(row.get('禁忌', '')):
+            parts.append(f"禁忌：{row.get('禁忌', '')}")
+        if not pd.isna(row.get('不良反应', '')):
+            parts.append(f"不良反应：{row.get('不良反应', '')}")
+        if not pd.isna(row.get('注意事项', '')):
+            parts.append(f"注意事项：{row.get('注意事项', '')}")
+        return "\n".join(parts)
+
+    def _format_tcm_text(self, row) -> str:
+        """格式化中医专家共识数据为文本"""
+        parts = []
+        parts.append(f"疾病：{row.get('病名', '')}")
+        if not pd.isna(row.get('文章标题', '')):
+            parts.append(f"指导标题：{row.get('文章标题', '')}")
+        if not pd.isna(row.get('中医证候', '')):
+            parts.append(f"中医证候：{row.get('中医证候', '')}")
+        if not pd.isna(row.get('治疗原则', '')):
+            parts.append(f"治疗原则：{row.get('治疗原则', '')}")
+        if not pd.isna(row.get('辨证论治', '')):
+            parts.append(f"辨证论治：{row.get('辨证论治', '')}")
+        if not pd.isna(row.get('临床分科', '')):
+            parts.append(f"临床分科：{row.get('临床分科', '')}")
+        return "\n".join(parts)
+
+    def _format_patent_medicine_text(self, row) -> str:
+        """格式化中成药数据为文本"""
+        parts = []
+        parts.append(f"药品名称：{row.get('药品名称', '')}")
+        if not pd.isna(row.get('主要成份', '')):
+            parts.append(f"主要成分：{row.get('主要成份', '')}")
+        if not pd.isna(row.get('功能主治', '')):
+            parts.append(f"功能主治：{row.get('功能主治', '')}")
+        if not pd.isna(row.get('用法用量', '')):
+            parts.append(f"用法用量：{row.get('用法用量', '')}")
+        if not pd.isna(row.get('规格', '')):
+            parts.append(f"规格：{row.get('规格', '')}")
+        return "\n".join(parts)
+
+    def _format_integrated_medicine_text(self, row) -> str:
+        """格式化中西医指南数据为文本"""
+        parts = []
+        if not pd.isna(row.get('疾病', '')):
+            parts.append(f"疾病：{row.get('疾病', '')}")
+        if not pd.isna(row.get('文章标题', '')):
+            parts.append(f"指导标题：{row.get('文章标题', '')}")
+        if not pd.isna(row.get('中医证候', '')):
+            parts.append(f"中医证候：{row.get('中医证候', '')}")
+        if not pd.isna(row.get('治疗原则', '')):
+            parts.append(f"治疗原则：{row.get('治疗原则', '')}")
+        if not pd.isna(row.get('中西医结合治疗', '')):
+            parts.append(f"中西医结合治疗：{row.get('中西医结合治疗', '')}")
+        if not pd.isna(row.get('临床分科', '')):
+            parts.append(f"临床分科：{row.get('临床分科', '')}")
+        return "\n".join(parts)
 
     def retrieve(self, query: str, top_k: int = None) -> List[Dict]:
         """
