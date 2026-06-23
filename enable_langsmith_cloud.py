@@ -8,7 +8,7 @@ import json
 from datetime import datetime
 
 # 设置用户的API Key
-os.environ["LANGCHAIN_API_KEY"] = "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"
+os.environ["LANGCHAIN_API_KEY"] = ""
 os.environ["LANGCHAIN_TRACING_V2"] = "true"
 os.environ["LANGCHAIN_PROJECT"] = "medical-agent-evaluation"
 
